@@ -37,18 +37,13 @@ const encodeCutout = (canvas) => (canEncodeWebp() ? toBlob(canvas, 'image/webp',
 export async function decodeToCanvas(blob, maxSide = WORK_SIDE) {
   const url = URL.createObjectURL(blob);
   try {
+    // Ждём событие load, а не img.decode(): decode() зависает, пока вкладка в фоне.
     const img = new Image();
-    img.decoding = 'async';
-    img.src = url;
-    try {
-      await img.decode();
-    } catch {
-      await new Promise((resolve, reject) => {
-        if (img.complete && img.naturalWidth) return resolve();
-        img.onload = resolve;
-        img.onerror = () => reject(new Error('Этот файл не открывается как фото'));
-      });
-    }
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error('Этот файл не открывается как фото'));
+      img.src = url;
+    });
     if (!img.naturalWidth) throw new Error('Этот файл не открывается как фото');
     const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
     const c = makeCanvas(img.naturalWidth * k, img.naturalHeight * k);
