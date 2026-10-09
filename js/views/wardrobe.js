@@ -1,11 +1,11 @@
-// Экран «Гардероб»: сетка вещей, категории, быстрые отметки «надел сегодня».
-import { h, icon, picture, chips, toast } from '../ui.js';
+// Экран «Гардероб»: сетка вещей, категории, отметки «надел».
+import { h, icon, picture, chips } from '../ui.js';
 import { state, activeItems, wearCount, wornOn, idleDays, toggleWear, dayKey } from '../store.js';
-import { GROUPS, GROUP, COLOR, COLORS, pluralItems } from '../catalog.js';
+import { GROUPS, GROUP, COLORS } from '../catalog.js';
 import { openItem } from './item.js';
-import { openAdd } from './add.js';
+import { addControl } from './add.js';
 
-const view = { group: 'all', sort: 'new', marking: false, markAgo: 0, color: null };
+const view = { group: 'all', sort: 'new', marking: false, markAgo: 0 };
 const MARK_DAYS = [
   { id: 0, name: 'Сегодня' },
   { id: 1, name: 'Вчера' },
@@ -14,9 +14,9 @@ const MARK_DAYS = [
 const markKey = () => dayKey(new Date(Date.now() - view.markAgo * 86400000));
 
 const SORTS = [
-  { id: 'new', name: 'Сначала новые' },
-  { id: 'most', name: 'Чаще ношу' },
-  { id: 'idle', name: 'Дольше без дела' },
+  { id: 'new', name: 'Новые' },
+  { id: 'most', name: 'Часто ношу' },
+  { id: 'idle', name: 'Давно не носил' },
   { id: 'color', name: 'По цвету' },
 ];
 
@@ -34,22 +34,25 @@ export function itemTitle(item) {
   return item.name || item.type || GROUP[item.group]?.name || 'Вещь';
 }
 
-export function tile(item, { onTap, selected = false, showTag = true, day } = {}) {
+const VERDICT = { sell: 'Продать', give: 'Отдать', toss: 'Выкинуть' };
+
+export function tile(item, { onTap, day } = {}) {
   const n = wearCount(item);
-  const today = wornOn(item, day || dayKey());
+  const worn = wornOn(item, day || dayKey());
   const fade = state.settings.fade ? fadeLevel(item) : 0;
   return h(
     'button',
     {
-      class: `tile fade-${fade} ${selected ? 'is-selected' : ''} ${today ? 'is-today' : ''}`,
+      class: `tile fade-${fade} ${worn ? 'is-worn' : ''}`,
       type: 'button',
       dataset: { id: item.id },
-      'aria-label': `${itemTitle(item)}, надевал ${n}`,
+      'aria-label': `${itemTitle(item)}, выходов: ${n}`,
       onClick: () => onTap && onTap(item),
     },
     picture('thumbs', item.id, { rev: item.rev, class: item.cut ? 'tile-img' : 'tile-img tile-img-photo' }),
-    showTag ? h('span', { class: `wear-tag ${n ? '' : 'is-zero'}` }, today ? icon('check', 13) : null, String(n)) : null,
-    item.decision !== 'keep' ? h('span', { class: `verdict verdict-${item.decision}` }, { sell: 'продать', give: 'отдать', toss: 'выкинуть' }[item.decision]) : null,
+    n ? h('span', { class: 'badge' }, String(n)) : null,
+    worn ? h('span', { class: 'tile-check' }, icon('check', 12)) : null,
+    item.decision !== 'keep' ? h('span', { class: `verdict verdict-${item.decision}` }, VERDICT[item.decision]) : null,
   );
 }
 
@@ -66,124 +69,97 @@ function sorted(items) {
 
 export function renderWardrobe(root) {
   const all = activeItems();
-  const idle = all.filter((i) => fadeLevel(i) === 2).length;
-  const wornToday = all.filter((i) => wornOn(i)).length;
 
   if (!all.length) {
+    view.marking = false;
     root.replaceChildren(
       h(
         'div',
         { class: 'screen' },
-        h('header', { class: 'screen-head' }, h('h1', null, 'Гардероб')),
-        h(
-          'div',
-          { class: 'empty' },
-          h('div', { class: 'empty-art' }, icon('hanger', 72)),
-          h('h2', null, 'Здесь пока пусто'),
-          h(
-            'p',
-            null,
-            'Разложи вещь на полу или кровати, сфотографируй сверху целиком. Фон уберётся сам, вещь попадёт в свою категорию.',
-          ),
-          h('button', { class: 'btn btn-primary btn-big', onClick: openAdd }, icon('camera', 20), 'Добавить первую вещь'),
-          h('p', { class: 'hint' }, 'Можно выбрать сразу много фото из галереи.'),
-        ),
+        h('header', { class: 'nav' }, h('h1', { class: 'large-title' }, 'Гардероб'), h('div', { class: 'nav-actions' }, addControl(icon('plus', 26), 'icon-btn'))),
+        h('div', { class: 'empty' }, h('div', { class: 'empty-art' }, icon('hanger', 56)), h('h2', null, 'Нет вещей'), addControl('Добавить фото', 'btn btn-fill')),
       ),
     );
     return;
   }
 
-  const counts = { all: all.length };
-  for (const it of all) counts[it.group] = (counts[it.group] || 0) + 1;
-  const groupOptions = [{ id: 'all', name: 'Все', count: counts.all }].concat(
-    GROUPS.filter((g) => counts[g.id]).map((g) => ({ id: g.id, name: g.name, count: counts[g.id] })),
-  );
-  if (view.group !== 'all' && !counts[view.group]) view.group = 'all';
+  const present = new Set(all.map((i) => i.group));
+  const groupOptions = [{ id: 'all', name: 'Все' }].concat(GROUPS.filter((g) => present.has(g.id)).map((g) => ({ id: g.id, name: g.name })));
+  if (view.group !== 'all' && !present.has(view.group)) view.group = 'all';
+  const list = sorted(view.group === 'all' ? all : all.filter((i) => i.group === view.group));
 
-  let list = view.group === 'all' ? all : all.filter((i) => i.group === view.group);
-  const colorsHere = [...new Set(list.map((i) => i.color).filter(Boolean))];
-  if (view.color && !colorsHere.includes(view.color)) view.color = null;
-  if (view.color) list = list.filter((i) => i.color === view.color);
-  list = sorted(list);
+  const rerender = () => renderWardrobe(root);
 
-  const sortSelect = h(
-    'select',
-    {
-      class: 'select',
-      'aria-label': 'Порядок',
-      onChange: (e) => {
-        view.sort = e.target.value;
-        renderWardrobe(root);
+  const sortButton = h(
+    'label',
+    { class: 'icon-btn select-btn', title: 'Порядок' },
+    icon('sort', 22),
+    h(
+      'select',
+      {
+        'aria-label': 'Порядок',
+        onChange: (e) => {
+          view.sort = e.target.value;
+          rerender();
+        },
       },
-    },
-    SORTS.map((s) => h('option', { value: s.id, selected: s.id === view.sort }, s.name)),
+      SORTS.map((s) => h('option', { value: s.id, selected: s.id === view.sort }, s.name)),
+    ),
   );
-
-  const colorRow =
-    colorsHere.length > 1
-      ? h(
-          'div',
-          { class: 'swatch-row', role: 'group', 'aria-label': 'Цвет' },
-          COLORS.filter((c) => colorsHere.includes(c.id)).map((c) =>
-            h('button', {
-              class: `swatch-btn ${view.color === c.id ? 'is-on' : ''}`,
-              style: { '--c': c.hex },
-              title: c.name,
-              'aria-label': c.name,
-              'aria-pressed': view.color === c.id ? 'true' : 'false',
-              onClick: () => {
-                view.color = view.color === c.id ? null : c.id;
-                renderWardrobe(root);
-              },
-            }),
-          ),
-        )
-      : null;
 
   const onTap = async (item) => {
-    if (view.marking) {
-      const on = await toggleWear(item.id, markKey());
-      if (navigator.vibrate) navigator.vibrate(8);
-      toast(on ? `Надел ${MARK_DAYS[view.markAgo].name.toLowerCase()}: ${itemTitle(item).toLowerCase()}` : 'Отметка снята');
-    } else {
-      openItem(item.id);
-    }
+    if (!view.marking) return openItem(item.id);
+    await toggleWear(item.id, markKey());
+    if (navigator.vibrate) navigator.vibrate(8);
   };
 
-  const summary = [pluralItems(all.length)];
-  if (idle) summary.push(`${idle} без дела`);
+  const actions = view.marking
+    ? h(
+        'button',
+        {
+          class: 'text-btn text-btn-strong',
+          onClick: () => {
+            view.marking = false;
+            view.markAgo = 0;
+            rerender();
+          },
+        },
+        'Готово',
+      )
+    : [
+        h(
+          'button',
+          {
+            class: 'text-btn',
+            onClick: () => {
+              view.marking = true;
+              rerender();
+            },
+          },
+          'Надел',
+        ),
+        sortButton,
+        addControl(icon('plus', 26), 'icon-btn'),
+      ];
 
   root.replaceChildren(
     h(
       'div',
       { class: `screen ${view.marking ? 'is-marking' : ''}` },
-      h(
-        'header',
-        { class: 'screen-head' },
-        h('div', null, h('h1', null, 'Гардероб'), h('p', { class: 'screen-sub' }, summary.join(', '))),
-        h(
-          'button',
-          {
-            class: `btn ${view.marking ? 'btn-chalk' : 'btn-outline'} btn-small`,
-            'aria-pressed': view.marking ? 'true' : 'false',
-            onClick: () => {
-              view.marking = !view.marking;
-              view.markAgo = 0;
-              renderWardrobe(root);
-            },
-          },
-          view.marking ? [icon('check', 16), 'Готово'] : wornToday ? `Сегодня на мне: ${wornToday}` : 'Что на мне сегодня',
-        ),
-      ),
+      h('header', { class: 'nav' }, h('h1', { class: 'large-title' }, view.marking ? 'Что надел' : 'Гардероб'), h('div', { class: 'nav-actions' }, actions)),
       view.marking
         ? h(
             'div',
-            { class: 'marking-bar' },
-            h('p', null, 'Нажимай на вещи, которые надевал. Повторное нажатие снимает отметку.'),
-            chips(MARK_DAYS, view.markAgo, (v) => {
-              view.markAgo = v;
-              renderWardrobe(root);
-            }),
+            { class: 'bar' },
+            chips(
+              MARK_DAYS,
+              view.markAgo,
+              (v) => {
+                view.markAgo = v;
+                rerender();
+              },
+              { className: 'segmented' },
+            ),
           )
         : null,
       chips(
@@ -191,22 +167,15 @@ export function renderWardrobe(root) {
         view.group,
         (id) => {
           view.group = id;
-          view.color = null;
-          renderWardrobe(root);
+          rerender();
         },
         { className: 'chips-scroll' },
       ),
-      h('div', { class: 'toolbar' }, sortSelect, colorRow),
-      list.length
-        ? h(
-            'div',
-            { class: 'grid' },
-            list.map((item) => tile(item, { onTap, day: view.marking ? markKey() : undefined })),
-          )
-        : h('p', { class: 'hint pad' }, `Вещей цвета «${COLOR[view.color]?.name.toLowerCase()}» здесь нет.`),
-      state.settings.fade && idle
-        ? h('p', { class: 'hint pad' }, 'Побледневшие вещи ты не надевал три месяца и дольше. Что с ними делать, подскажет «Разбор».')
-        : null,
+      h(
+        'div',
+        { class: 'grid' },
+        list.map((item) => tile(item, { onTap, day: view.marking ? markKey() : undefined })),
+      ),
     ),
   );
 }

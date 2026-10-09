@@ -59,6 +59,10 @@ const P = {
   minus: 'M5 12h14',
   toFront: 'M9 9h11v11H9zM4 15V4h11',
   toBack: 'M4 4h11v11H4zM20 9v11H9',
+  shuffle: 'M3 7h3.2c1.9 0 3.2.9 4.3 2.6l2.9 4.8c1.1 1.7 2.4 2.6 4.3 2.6H21M18.2 14.2 21 17l-2.8 2.8M3 17h3.2c1.2 0 2.2-.4 3-1.1M21 7h-3.3c-1.2 0-2.2.4-3 1.1M18.2 4.2 21 7l-2.8 2.8',
+  sort: 'M7 5v14M3.5 15.5 7 19l3.5-3.5M17 19V5M13.5 8.5 17 5l3.5 3.5',
+  chevron: 'M9.5 5.5 16 12l-6.5 6.5',
+  wand: 'M5 19 15 9M13 7l4 4M17.5 3.5v3M16 5h3M20 10v2M19 11h2M9 4v2M8 5h2',
 };
 export function icon(name, size = 24) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -101,16 +105,23 @@ export function forgetPicture(store, id) {
 // ---------- шторки ----------
 const sheetStack = [];
 
-export function openSheet({ title, body, footer, full = false, onClose, className = '', actions, guard }) {
+export function openSheet({ title, body, footer, full = false, onClose, className = '', left, right, done = 'Готово', guard }) {
   const backdrop = h('div', { class: 'sheet-backdrop' });
   const titleEl = h('h2', { class: 'sheet-title' }, title || '');
-  const closeBtn = h('button', { class: 'icon-btn', 'aria-label': 'Закрыть', onClick: () => api.close() }, icon('close'));
-  const head = h('header', { class: 'sheet-head' }, titleEl, h('div', { class: 'sheet-actions' }, actions || null, closeBtn));
+  const doneBtn = done ? h('button', { class: 'text-btn text-btn-strong', onClick: () => api.close() }, done) : null;
+  const head = h(
+    'header',
+    { class: 'sheet-head' },
+    h('div', { class: 'sheet-side sheet-left' }, left || null),
+    titleEl,
+    h('div', { class: 'sheet-side sheet-right' }, right || null, doneBtn),
+  );
   const bodyEl = h('div', { class: 'sheet-body' }, body || null);
   const footEl = footer ? h('footer', { class: 'sheet-foot' }, footer) : null;
   const sheet = h(
     'section',
     { class: `sheet ${full ? 'sheet-full' : ''} ${className}`, role: 'dialog', 'aria-modal': 'true', 'aria-label': title || 'Окно' },
+    h('i', { class: 'grabber' }),
     head,
     bodyEl,
     footEl,
@@ -175,22 +186,26 @@ export function confirmSheet({ title, text, confirm = 'Да', cancel = 'Отме
   return new Promise((resolve) => {
     let answered = false;
     const sheet = openSheet({
-      title,
       className: 'sheet-confirm',
-      body: text ? h('p', { class: 'sheet-text' }, text) : null,
-      footer: [
-        h('button', { class: 'btn btn-ghost', onClick: () => sheet.close() }, cancel),
+      done: null,
+      body: [
         h(
-          'button',
-          {
-            class: `btn ${danger ? 'btn-danger' : 'btn-primary'}`,
-            onClick: () => {
-              answered = true;
-              sheet.close();
+          'div',
+          { class: 'action-group' },
+          h('div', { class: 'action-title' }, h('b', null, title), text ? h('span', null, text) : null),
+          h(
+            'button',
+            {
+              class: `action ${danger ? 'action-danger' : ''}`,
+              onClick: () => {
+                answered = true;
+                sheet.close();
+              },
             },
-          },
-          confirm,
+            confirm,
+          ),
         ),
+        h('div', { class: 'action-group' }, h('button', { class: 'action action-cancel', onClick: () => sheet.close() }, cancel)),
       ],
       onClose: () => resolve(answered),
     });
@@ -224,6 +239,8 @@ export function chips(options, value, onChange, { className = '', allowNone = fa
             class: `chip ${o.id === current ? 'is-on' : ''}`,
             type: 'button',
             'aria-pressed': o.id === current ? 'true' : 'false',
+            'aria-label': o.hideName ? o.name : null,
+            title: o.hideName ? o.name : null,
             dataset: { id: o.id },
             onClick: () => {
               const next = allowNone && o.id === current ? null : o.id;
@@ -232,7 +249,7 @@ export function chips(options, value, onChange, { className = '', allowNone = fa
             },
           },
           o.swatch ? h('i', { class: 'swatch', style: { background: o.swatch } }) : null,
-          o.name,
+          o.swatch && o.hideName ? null : o.name,
           o.count !== undefined ? h('span', { class: 'chip-count' }, o.count) : null,
         ),
       ),

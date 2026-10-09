@@ -3,23 +3,14 @@ import { h, icon, picture, chips, openSheet, confirmSheet, toast } from '../ui.j
 import { state, activeItems, itemById, outfitById, saveOutfit, deleteOutfit, loadFullImage } from '../store.js';
 import { GROUPS } from '../catalog.js';
 import { renderOutfit } from '../pipeline.js';
+import { SLOTS, fitWidth, randomLayers } from '../shuffle.js';
 import { itemTitle } from './wardrobe.js';
 
-// Куда вещь встаёт по нажатию: центр (доли полотна) и ширина.
-const SLOTS = {
-  top: { x: 0.5, y: 0.27, w: 0.5 },
-  bottom: { x: 0.5, y: 0.63, w: 0.4 },
-  dress: { x: 0.5, y: 0.45, w: 0.5 },
-  outer: { x: 0.27, y: 0.32, w: 0.46 },
-  shoes: { x: 0.5, y: 0.9, w: 0.28 },
-  acc: { x: 0.82, y: 0.16, w: 0.24 },
-  other: { x: 0.18, y: 0.82, w: 0.26 },
-};
 const MIN_W = 0.08;
 const MAX_W = 1.3;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
-export function openBuilder(outfitId) {
+export function openBuilder(outfitId, options = {}) {
   const existing = outfitId ? outfitById(outfitId) : null;
   let layers = existing ? existing.layers.filter((l) => itemById(l.itemId)).map((l) => ({ ...l })) : [];
   let selected = null; // itemId выбранного слоя
@@ -28,7 +19,7 @@ export function openBuilder(outfitId) {
   let saving = false;
 
   const nameInput = h('input', {
-    class: 'input builder-name',
+    class: 'builder-name',
     type: 'text',
     value: existing?.name || '',
     placeholder: `Образ ${state.outfits.length + (existing ? 0 : 1)}`,
@@ -36,24 +27,23 @@ export function openBuilder(outfitId) {
     enterKeyHint: 'done',
     onInput: () => (dirty = true),
   });
-  const saveBtn = h('button', { class: 'btn btn-primary btn-small', onClick: save }, 'Сохранить');
-  const deleteBtn = existing
-    ? h(
-        'button',
-        {
-          class: 'icon-btn',
-          'aria-label': 'Удалить образ',
-          onClick: async () => {
-            if (!(await confirmSheet({ title: 'Удалить образ?', text: 'Вещи останутся в гардеробе.', confirm: 'Удалить', danger: true }))) return;
-            await deleteOutfit(existing.id);
-            dirty = false;
-            sheet.close();
-            toast('Образ удалён');
-          },
-        },
-        icon('trash', 20),
-      )
-    : null;
+  const saveBtn = h('button', { class: 'text-btn text-btn-strong', onClick: save }, 'Сохранить');
+  const cancelBtn = h('button', { class: 'text-btn', onClick: () => sheet.close() }, 'Отмена');
+
+  async function removeOutfit() {
+    if (!(await confirmSheet({ title: 'Удалить образ?', confirm: 'Удалить', danger: true }))) return;
+    await deleteOutfit(existing.id);
+    dirty = false;
+    sheet.close();
+  }
+
+  function shuffle() {
+    layers = randomLayers(activeItems(), layers);
+    selected = null;
+    dirty = true;
+    renderBoard();
+    renderTray();
+  }
 
   const board = h('div', { class: 'board', 'aria-label': 'Полотно образа' });
   const boardWrap = h('div', { class: 'board-wrap' }, board);
@@ -66,10 +56,12 @@ export function openBuilder(outfitId) {
     title: '',
     full: true,
     className: 'sheet-builder',
-    actions: [deleteBtn, saveBtn],
+    left: cancelBtn,
+    right: saveBtn,
+    done: null,
     guard: async () => {
       if (!dirty || saving) return true;
-      return confirmSheet({ title: 'Закрыть без сохранения?', text: 'Изменения в образе пропадут.', confirm: 'Закрыть', cancel: 'Остаться' });
+      return confirmSheet({ title: 'Закрыть без сохранения?', confirm: 'Закрыть', cancel: 'Остаться', danger: true });
     },
     onClose: () => {
       ro.disconnect();
@@ -106,27 +98,30 @@ export function openBuilder(outfitId) {
       placeLayerEl(el, layer);
       return el;
     });
-    if (!layers.length) {
-      nodes.push(h('div', { class: 'board-hint' }, icon('up', 28), h('p', null, 'Тяни вещи из ленты сюда'), h('span', null, 'или просто нажимай на них')));
-    }
+    if (!layers.length) nodes.push(h('div', { class: 'board-hint' }, 'Перетащи вещи сюда'));
     board.replaceChildren(...nodes);
     renderTools();
   }
 
   function renderTools() {
     const layer = selected && layerOf(selected);
+    const tool = (label, ic, fn, extra = {}) => h('button', { class: `tool ${extra.className || ''}`, disabled: extra.disabled, 'aria-label': label, title: label, onClick: fn }, icon(ic, 22));
     if (!layer) {
-      tools.replaceChildren(h('span', { class: 'tools-hint' }, layers.length ? 'Нажми на вещь, чтобы изменить размер или слой' : ''));
+      tools.replaceChildren(
+        tool('Случайный образ', 'shuffle', shuffle),
+        h('span', { class: 'tools-gap' }),
+        ...(existing ? [tool('Удалить образ', 'trash', removeOutfit, { className: 'tool-danger' })] : []),
+      );
       return;
     }
     const idx = layers.indexOf(layer);
-    const tool = (label, ic, fn, disabled = false) => h('button', { class: 'tool', disabled, 'aria-label': label, title: label, onClick: fn }, icon(ic, 20), h('span', null, label));
     tools.replaceChildren(
       tool('Меньше', 'minus', () => resize(layer, 1 / 1.12)),
       tool('Больше', 'plus', () => resize(layer, 1.12)),
-      tool('Назад', 'toBack', () => reorder(idx, -1), idx === 0),
-      tool('Вперёд', 'toFront', () => reorder(idx, 1), idx === layers.length - 1),
-      tool('Убрать', 'trash', () => removeLayer(layer.itemId)),
+      tool('На слой ниже', 'toBack', () => reorder(idx, -1), { disabled: idx === 0 }),
+      tool('На слой выше', 'toFront', () => reorder(idx, 1), { disabled: idx === layers.length - 1 }),
+      h('span', { class: 'tools-gap' }),
+      tool('Убрать с полотна', 'trash', () => removeLayer(layer.itemId)),
     );
   }
 
@@ -152,11 +147,7 @@ export function openBuilder(outfitId) {
   }
   function addLayer(item, x, y) {
     const slot = SLOTS[item.group] || SLOTS.other;
-    // Высокие вещи делаем уже, чтобы помещались в полотно.
-    const ratio = item.ratio || 1;
-    let w = slot.w;
-    const hFrac = (w / ratio) * (3 / 4);
-    if (hFrac > 0.62) w *= 0.62 / hFrac;
+    const w = fitWidth(item, slot.w);
     const existingLayer = layerOf(item.id);
     if (existingLayer) {
       if (x !== undefined) {
@@ -188,7 +179,7 @@ export function openBuilder(outfitId) {
           renderTray();
           trayRow.scrollLeft = 0;
         },
-        { className: 'chips-scroll chips-tight' },
+        { className: 'chips-scroll chips-small' },
       ),
     );
     const list = group === 'all' ? all : all.filter((i) => i.group === group);
@@ -348,13 +339,9 @@ export function openBuilder(outfitId) {
 
   async function save() {
     if (saving) return;
-    if (!layers.length) {
-      toast('Положи на полотно хотя бы одну вещь');
-      return;
-    }
+    if (!layers.length) return;
     saving = true;
     saveBtn.disabled = true;
-    saveBtn.textContent = 'Сохраняю…';
     try {
       const preview = await renderOutfit(
         layers.map((l, i) => ({ ...l, z: i })),
@@ -370,16 +357,18 @@ export function openBuilder(outfitId) {
       );
       dirty = false;
       sheet.close();
-      toast('Образ сохранён');
     } catch (err) {
       console.error(err);
       toast(`Не получилось сохранить: ${err.message}`);
       saving = false;
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Сохранить';
     }
   }
 
+  if (options.shuffle && !existing) {
+    layers = randomLayers(activeItems());
+    dirty = layers.length > 0;
+  }
   renderBoard();
   renderTray();
 }

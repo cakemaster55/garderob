@@ -1,6 +1,6 @@
 // Офлайн-режим: оболочка приложения кладётся в кэш при установке,
 // модели и остальное — при первом обращении.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL = `garderob-shell-${VERSION}`;
 const HEAVY = 'garderob-models-v1';
 
@@ -15,6 +15,7 @@ const SHELL_FILES = [
   'js/ml.js',
   'js/ml-worker.js',
   'js/pipeline.js',
+  'js/shuffle.js',
   'js/store.js',
   'js/ui.js',
   'js/views/add.js',
@@ -24,8 +25,6 @@ const SHELL_FILES = [
   'js/views/outfits.js',
   'js/views/settings.js',
   'js/views/wardrobe.js',
-  'fonts/sofia-sans-condensed-cyrillic-wght-normal.woff2',
-  'fonts/sofia-sans-condensed-latin-wght-normal.woff2',
   'icons/icon-192.png',
   'icons/apple-touch-icon.png',
 ];

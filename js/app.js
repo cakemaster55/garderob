@@ -5,7 +5,6 @@ import { renderWardrobe } from './views/wardrobe.js';
 import { renderOutfits } from './views/outfits.js';
 import { renderInsights } from './views/insights.js';
 import { renderSettings } from './views/settings.js';
-import { openAdd } from './views/add.js';
 
 const root = document.getElementById('view');
 const TABS = {
@@ -41,13 +40,10 @@ async function boot() {
     await load();
   } catch (err) {
     console.error(err);
-    root.replaceChildren(
-      h('div', { class: 'screen' }, h('div', { class: 'empty' }, h('h2', null, 'Не открывается хранилище'), h('p', null, 'Похоже, браузер запретил хранить данные (например, в приватном режиме). Открой страницу в обычной вкладке Safari.'))),
-    );
+    root.replaceChildren(h('div', { class: 'screen' }, h('div', { class: 'empty' }, h('h2', null, 'Хранилище недоступно'), h('p', null, 'Открой страницу в обычной вкладке Safari.'))));
     return;
   }
   window.addEventListener('hashchange', () => show(true));
-  document.getElementById('add-button').addEventListener('click', openAdd);
 
   let queued = false;
   subscribe((what) => {

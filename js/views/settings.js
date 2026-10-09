@@ -1,12 +1,12 @@
 // Экран «Ещё»: установка, резервная копия, вид, архив, данные.
 import { h, icon, picture, toast, confirmSheet, openSheet } from '../ui.js';
-import { state, saveSettings, updateItem, deleteItem, load, emit, getWishlist } from '../store.js';
+import { state, saveSettings, updateItem, load, emit, getWishlist } from '../store.js';
 import { db, IMAGE_STORES } from '../db.js';
 import { GONE, pluralItems } from '../catalog.js';
 import { itemTitle } from './wardrobe.js';
 
 const MAGIC = 'GARDEROB1\n';
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1';
 
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -79,8 +79,6 @@ export async function restoreBackup(file) {
 
 async function exportBackup(btn) {
   btn.disabled = true;
-  const label = btn.textContent;
-  btn.textContent = 'Собираю копию…';
   try {
     const blob = await buildBackup();
     const name = `garderob-${new Date().toISOString().slice(0, 10)}.garderob`;
@@ -103,13 +101,12 @@ async function exportBackup(btn) {
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
     await db.kvSet('lastBackup', Date.now());
-    toast(`Копия готова: ${fmtSize(blob.size)}`);
+    toast(`Копия сохранена, ${fmtSize(blob.size)}`);
   } catch (err) {
     console.error(err);
-    toast(`Не получилось сделать копию: ${err.message}`);
+    toast(`Не получилось: ${err.message}`);
   } finally {
     btn.disabled = false;
-    btn.textContent = label;
   }
 }
 
@@ -119,36 +116,24 @@ function openArchive() {
     const gone = state.items.filter((i) => i.goneAt).sort((a, b) => b.goneAt - a.goneAt);
     if (!gone.length) return sheet.close();
     sheet.setBody(
-      h('p', { class: 'hint' }, 'Эти вещи убраны из гардероба, но остаются в истории.'),
-      gone.map((i) =>
-        h(
-          'div',
-          { class: 'row' },
-          h('div', { class: 'row-main' }, h('span', { class: 'row-thumb' }, picture('thumbs', i.id, { rev: i.rev })), h('span', { class: 'row-text' }, h('b', null, itemTitle(i)), h('span', null, `${GONE[i.decision]} ${new Date(i.goneAt).toLocaleDateString('ru-RU')}`))),
+      h(
+        'div',
+        { class: 'group' },
+        gone.map((i) =>
           h(
             'div',
-            { class: 'row-actions' },
+            { class: 'cell cell-item' },
+            h('div', { class: 'cell-main' }, h('span', { class: 'cell-thumb' }, picture('thumbs', i.id, { rev: i.rev })), h('span', { class: 'cell-text' }, h('b', null, itemTitle(i)), h('span', null, `${GONE[i.decision]} ${new Date(i.goneAt).toLocaleDateString('ru-RU')}`))),
             h(
               'button',
               {
-                class: 'mini',
+                class: 'text-btn',
                 onClick: async () => {
                   await updateItem(i.id, { goneAt: null, decision: 'keep' });
                   draw();
                 },
               },
               'Вернуть',
-            ),
-            h(
-              'button',
-              {
-                class: 'mini mini-quiet',
-                onClick: async () => {
-                  await deleteItem(i.id);
-                  draw();
-                },
-              },
-              'Удалить совсем',
             ),
           ),
         ),
@@ -160,23 +145,20 @@ function openArchive() {
 
 export function renderSettings(root) {
   const goneCount = state.items.filter((i) => i.goneAt).length;
-  const storageLine = h('p', { class: 'hint' }, 'Считаю место…');
-  const backupLine = h('p', { class: 'hint' });
+  const storageLine = h('p', { class: 'caption center' }, `Гардероб ${APP_VERSION}`);
+  const backupLine = h('p', { class: 'caption' });
 
   (async () => {
-    let text = `${pluralItems(state.items.length)}, образов: ${state.outfits.length}.`;
     try {
       if (navigator.storage?.estimate) {
         const est = await navigator.storage.estimate();
-        text += ` Занято на устройстве около ${fmtSize(est.usage)}.`;
+        storageLine.textContent = `${pluralItems(state.items.length)}, ${fmtSize(est.usage)}. Версия ${APP_VERSION}`;
       }
-      if (navigator.storage?.persisted && !(await navigator.storage.persisted()) && navigator.storage.persist) {
-        await navigator.storage.persist();
-      }
+      if (navigator.storage?.persisted && !(await navigator.storage.persisted()) && navigator.storage.persist) await navigator.storage.persist();
     } catch {}
-    storageLine.textContent = text;
     const last = await db.kvGet('lastBackup');
-    backupLine.textContent = last ? `Последняя копия: ${new Date(last).toLocaleDateString('ru-RU')}.` : 'Копий ещё не было.';
+    if (last) backupLine.textContent = `Последняя копия: ${new Date(last).toLocaleDateString('ru-RU')}`;
+    else backupLine.remove();
   })();
 
   const restoreInput = h('input', {
@@ -186,96 +168,62 @@ export function renderSettings(root) {
       const file = e.target.files[0];
       e.target.value = '';
       if (!file) return;
-      const ok = await confirmSheet({
-        title: 'Восстановить из копии?',
-        text: 'Всё, что сейчас есть в приложении, заменится содержимым файла.',
-        confirm: 'Восстановить',
-        danger: state.items.length > 0,
-      });
+      const ok = await confirmSheet({ title: 'Восстановить из копии?', text: 'Текущие данные заменятся содержимым файла.', confirm: 'Восстановить', danger: state.items.length > 0 });
       if (!ok) return;
       try {
-        const r = await restoreBackup(file);
-        toast(`Восстановлено: ${pluralItems(r.items)}`);
-        setTimeout(() => location.reload(), 900);
+        await restoreBackup(file);
+        location.reload();
       } catch (err) {
         console.error(err);
-        toast(`Не получилось восстановить: ${err.message}`);
+        toast(`Не получилось: ${err.message}`);
         await load();
         emit('items');
       }
     },
   });
 
-  const toggle = (label, hint, key) =>
-    h(
-      'label',
-      { class: 'switch-row' },
-      h('span', null, h('b', null, label), h('span', { class: 'hint' }, hint)),
-      h('input', { type: 'checkbox', class: 'switch', checked: !!state.settings[key], onChange: (e) => saveSettings({ [key]: e.target.checked }) }),
-    );
-
-  const exportBtn = h('button', { class: 'btn btn-primary', onClick: (e) => exportBackup(e.currentTarget) }, 'Сохранить копию');
+  const toggle = (label, key) => h('label', { class: 'cell' }, h('span', null, label), h('input', { type: 'checkbox', class: 'switch', checked: !!state.settings[key], onChange: (e) => saveSettings({ [key]: e.target.checked }) }));
 
   root.replaceChildren(
     h(
       'div',
-      { class: 'screen screen-settings' },
-      h('header', { class: 'screen-head' }, h('div', null, h('h1', null, 'Ещё'))),
-      !isStandalone()
-        ? h(
-            'section',
-            { class: 'block callout' },
-            h('h2', null, 'Поставь на экран «Домой»'),
-            isIos()
-              ? h('ol', { class: 'steps' }, h('li', null, 'Открой эту страницу в Safari.'), h('li', null, 'Нажми «Поделиться» внизу экрана.'), h('li', null, 'Выбери «На экран „Домой“».'))
-              : h('p', null, 'В меню браузера выбери «Установить приложение» или «Добавить на главный экран».'),
-            h('p', { class: 'hint' }, 'Сделай это до того, как добавлять вещи: у значка на экране «Домой» своя память, отдельная от Safari. Приложение с экрана работает без интернета.'),
-          )
+      { class: 'screen screen-list' },
+      h('header', { class: 'nav' }, h('h1', { class: 'large-title' }, 'Ещё')),
+      !isStandalone() && isIos()
+        ? h('section', { class: 'section' }, h('div', { class: 'group' }, h('div', { class: 'cell cell-note' }, 'Чтобы установить: в Safari «Поделиться», затем «На экран „Домой“».')))
         : null,
       h(
         'section',
-        { class: 'block' },
-        h('h2', null, 'Резервная копия'),
-        h('p', null, 'Вещи и фото хранятся только на этом телефоне. Копия — один файл, который можно положить в «Файлы» или iCloud и восстановить на новом телефоне.'),
+        { class: 'section' },
+        h('h2', { class: 'section-title' }, 'Резервная копия'),
+        h('div', { class: 'group' }, h('button', { class: 'cell cell-action', onClick: (e) => exportBackup(e.currentTarget) }, 'Сохранить копию'), h('label', { class: 'cell cell-action' }, 'Восстановить из копии', restoreInput)),
         backupLine,
-        h('div', { class: 'btn-col' }, exportBtn, h('label', { class: 'btn btn-outline' }, 'Восстановить из копии', restoreInput)),
       ),
-      h(
-        'section',
-        { class: 'block' },
-        h('h2', null, 'Вид и обработка'),
-        toggle('Вещи без дела бледнеют', 'Чем дольше не надевал, тем бледнее вещь в сетке.', 'fade'),
-        toggle('Сразу вырезать точно', 'Аккуратнее на пёстром фоне, но в разы медленнее и требует больше памяти. Если приложение вылетает, выключи.', 'fineCutout'),
-      ),
+      h('section', { class: 'section' }, h('h2', { class: 'section-title' }, 'Вид'), h('div', { class: 'group' }, toggle('Приглушать неношеное', 'fade'), toggle('Точное вырезание', 'fineCutout'))),
       goneCount
-        ? h('section', { class: 'block' }, h('h2', null, 'Ушедшие вещи'), h('p', { class: 'hint' }, `Продано, отдано и выкинуто: ${goneCount}.`), h('button', { class: 'btn btn-outline', onClick: openArchive }, 'Открыть список'))
+        ? h('section', { class: 'section' }, h('div', { class: 'group' }, h('button', { class: 'cell cell-nav', onClick: openArchive }, h('span', null, 'Ушедшие вещи'), h('span', { class: 'cell-value' }, String(goneCount), icon('chevron', 16)))))
         : null,
       h(
         'section',
-        { class: 'block' },
-        h('h2', null, 'Данные'),
-        storageLine,
+        { class: 'section' },
         h(
-          'button',
-          {
-            class: 'btn btn-danger-ghost',
-            onClick: async () => {
-              const ok = await confirmSheet({
-                title: 'Стереть весь гардероб?',
-                text: 'Удалятся все вещи, фото, образы и отметки. Вернуть получится только из резервной копии.',
-                confirm: 'Стереть всё',
-                danger: true,
-              });
-              if (!ok) return;
-              await db.clearAll();
-              location.reload();
+          'div',
+          { class: 'group' },
+          h(
+            'button',
+            {
+              class: 'cell cell-action cell-danger',
+              onClick: async () => {
+                if (!(await confirmSheet({ title: 'Стереть все данные?', text: 'Вещи, фото, образы и отметки удалятся.', confirm: 'Стереть', danger: true }))) return;
+                await db.clearAll();
+                location.reload();
+              },
             },
-          },
-          icon('trash', 18),
-          'Стереть все данные',
+            'Стереть все данные',
+          ),
         ),
       ),
-      h('p', { class: 'hint pad about' }, `Гардероб ${APP_VERSION}. Фото обрабатываются на телефоне и никуда не отправляются.`),
+      storageLine,
     ),
   );
 }
