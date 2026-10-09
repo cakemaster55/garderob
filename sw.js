@@ -1,6 +1,6 @@
 // Офлайн-режим: оболочка приложения кладётся в кэш при установке,
 // модели и остальное — при первом обращении.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = `garderob-shell-${VERSION}`;
 const HEAVY = 'garderob-models-v1';
 
@@ -64,7 +64,8 @@ async function cacheFirst(request) {
 async function networkFirst(request) {
   const cache = await caches.open(SHELL);
   try {
-    const res = await fetch(request);
+    // no-cache: сверяемся с сервером, чтобы обновление приложения не ждало, пока истечёт кэш браузера.
+    const res = await fetch(request.url, { cache: 'no-cache', credentials: 'same-origin' });
     if (res.ok && res.status === 200) cache.put(request, res.clone()).catch(() => {});
     return res;
   } catch (err) {
