@@ -5,7 +5,13 @@ import { GROUPS, GROUP, COLOR, COLORS, pluralItems } from '../catalog.js';
 import { openItem } from './item.js';
 import { openAdd } from './add.js';
 
-const view = { group: 'all', sort: 'new', marking: false, color: null };
+const view = { group: 'all', sort: 'new', marking: false, markAgo: 0, color: null };
+const MARK_DAYS = [
+  { id: 0, name: 'Сегодня' },
+  { id: 1, name: 'Вчера' },
+  { id: 2, name: 'Позавчера' },
+];
+const markKey = () => dayKey(new Date(Date.now() - view.markAgo * 86400000));
 
 const SORTS = [
   { id: 'new', name: 'Сначала новые' },
@@ -28,9 +34,9 @@ export function itemTitle(item) {
   return item.name || item.type || GROUP[item.group]?.name || 'Вещь';
 }
 
-export function tile(item, { onTap, selected = false, showTag = true } = {}) {
+export function tile(item, { onTap, selected = false, showTag = true, day } = {}) {
   const n = wearCount(item);
-  const today = wornOn(item);
+  const today = wornOn(item, day || dayKey());
   const fade = state.settings.fade ? fadeLevel(item) : 0;
   return h(
     'button',
@@ -136,9 +142,9 @@ export function renderWardrobe(root) {
 
   const onTap = async (item) => {
     if (view.marking) {
-      const on = await toggleWear(item.id, dayKey());
+      const on = await toggleWear(item.id, markKey());
       if (navigator.vibrate) navigator.vibrate(8);
-      toast(on ? `Надел: ${itemTitle(item).toLowerCase()}` : 'Отметка снята');
+      toast(on ? `Надел ${MARK_DAYS[view.markAgo].name.toLowerCase()}: ${itemTitle(item).toLowerCase()}` : 'Отметка снята');
     } else {
       openItem(item.id);
     }
@@ -162,6 +168,7 @@ export function renderWardrobe(root) {
             'aria-pressed': view.marking ? 'true' : 'false',
             onClick: () => {
               view.marking = !view.marking;
+              view.markAgo = 0;
               renderWardrobe(root);
             },
           },
@@ -169,7 +176,15 @@ export function renderWardrobe(root) {
         ),
       ),
       view.marking
-        ? h('p', { class: 'marking-bar' }, 'Нажимай на вещи, которые надел сегодня. Повторное нажатие снимает отметку.')
+        ? h(
+            'div',
+            { class: 'marking-bar' },
+            h('p', null, 'Нажимай на вещи, которые надевал. Повторное нажатие снимает отметку.'),
+            chips(MARK_DAYS, view.markAgo, (v) => {
+              view.markAgo = v;
+              renderWardrobe(root);
+            }),
+          )
         : null,
       chips(
         groupOptions,
@@ -186,7 +201,7 @@ export function renderWardrobe(root) {
         ? h(
             'div',
             { class: 'grid' },
-            list.map((item) => tile(item, { onTap })),
+            list.map((item) => tile(item, { onTap, day: view.marking ? markKey() : undefined })),
           )
         : h('p', { class: 'hint pad' }, `Вещей цвета «${COLOR[view.color]?.name.toLowerCase()}» здесь нет.`),
       state.settings.fade && idle

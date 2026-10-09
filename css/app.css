@@ -480,13 +480,31 @@ img {
   box-shadow: inset 0 0 0 4px var(--chalk);
 }
 .marking-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   margin: 0 16px 10px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   background: var(--chalk);
   color: var(--chalk-ink);
   border-radius: var(--r);
   font-size: 14.5px;
   font-weight: 500;
+}
+
+.marking-bar .chip {
+  background: transparent;
+  border-color: rgba(27, 36, 64, 0.35);
+  color: #1b2440;
+}
+.marking-bar .chip.is-on {
+  background: #1b2440;
+  border-color: #1b2440;
+  color: #fff;
+}
+html.has-sheet,
+html.has-sheet body {
+  overflow: hidden;
 }
 
 /* ---------- пустые экраны ---------- */

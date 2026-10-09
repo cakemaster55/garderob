@@ -8,6 +8,8 @@ import { ml } from '../ml.js';
 const MODEL_NAMES = { cutout: 'модель вырезания фона', classify: 'модель категорий', cutoutFine: 'точную модель вырезания' };
 
 export function openAdd() {
+  // Заранее подтягиваем модели, чтобы первое фото не ждало загрузки.
+  ml.warmup().catch(() => {});
   const pick = (files) => {
     const list = [...files].filter((f) => f.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name));
     if (!list.length) return;

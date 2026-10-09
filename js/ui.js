@@ -135,6 +135,7 @@ export function openSheet({ title, body, footer, full = false, onClose, classNam
       closed = true;
       const i = sheetStack.indexOf(api);
       if (i >= 0) sheetStack.splice(i, 1);
+      document.documentElement.classList.toggle('has-sheet', sheetStack.length > 0);
       sheet.classList.remove('is-open');
       backdrop.classList.remove('is-open');
       const done = () => {
@@ -151,6 +152,7 @@ export function openSheet({ title, body, footer, full = false, onClose, classNam
   sheet.style.zIndex = 41 + sheetStack.length * 2;
   document.body.append(backdrop, sheet);
   sheetStack.push(api);
+  document.documentElement.classList.add('has-sheet');
   // Двойной кадр, чтобы сработала анимация появления.
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
