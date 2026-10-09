@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Гардероб</title>
+<meta name="description" content="Личный гардероб: фото вещей без фона, учёт носки, разбор и конструктор образов.">
+<meta name="theme-color" content="#e9ecef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#11141b" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Гардероб">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="preload" href="fonts/sofia-sans-condensed-cyrillic-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<main id="view" tabindex="-1"></main>
+
+<nav class="tabbar" aria-label="Разделы">
+  <a class="tab" href="#wardrobe" data-tab="wardrobe">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.2a2.2 2.2 0 1 0-2.2-2.2M12 8.2v2.1M12 10.3 3.6 15.8c-1 .7-.5 2.2.7 2.2h15.4c1.2 0 1.7-1.5.7-2.2L12 10.3Z"/></svg>
+    <span>Гардероб</span>
+  </a>
+  <a class="tab" href="#outfits" data-tab="outfits">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v9H4zM13 4h7v5h-7zM13 11h7v9h-7zM4 15h7v5H4z"/></svg>
+    <span>Образы</span>
+  </a>
+  <button class="tab-add" id="add-button" type="button" aria-label="Добавить вещи">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <a class="tab" href="#insights" data-tab="insights">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3"/></svg>
+    <span>Разбор</span>
+  </a>
+  <a class="tab" href="#more" data-tab="more">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg>
+    <span>Ещё</span>
+  </a>
+</nav>
+
+<noscript><p style="padding:24px">Для работы приложения нужен JavaScript.</p></noscript>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
